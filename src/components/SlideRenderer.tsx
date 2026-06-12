@@ -44,6 +44,8 @@ const chip = (p: Palette): CSSProperties => ({
   borderRadius: 999,
   background: p.chipBg,
   color: p.chipText,
+  maxWidth: "100%",
+  overflowWrap: "anywhere",
 });
 
 function Heading({ s }: { s: Section }) {
@@ -64,9 +66,9 @@ function Points({ s }: { s: Section }) {
   return (
     <div style={{ color: p.text }}>
       {s.points.map((pt, i) => (
-        <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: 13.5, lineHeight: 1.45, marginTop: 5 }}>
+        <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: 13.5, lineHeight: 1.45, marginTop: 5, minWidth: 0 }}>
           <span style={{ flex: "none", width: 6, height: 6, borderRadius: "50%", marginTop: 7, background: p.dot }} />
-          <span>{pt}</span>
+          <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{pt}</span>
         </div>
       ))}
     </div>
@@ -75,7 +77,7 @@ function Points({ s }: { s: Section }) {
 
 function Cards({ sections }: { sections: Section[] }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 11 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 11 }}>
       {sections.map((s, i) => (
         <div key={i} style={{ background: COLORS[s.color].card, borderRadius: 15, padding: "11px 13px 12px" }}>
           <Heading s={s} />
@@ -130,7 +132,7 @@ function Mindmap({ sheet }: { sheet: Sheet }) {
         </div>
       ) : null}
       <div style={{ textAlign: "center", color: "#DC9DAE", fontSize: 16, lineHeight: 0.7, margin: "2px 0" }}>⋀</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 10 }}>
         {sections.map((s, i) => {
           const p = COLORS[s.color];
           return (
