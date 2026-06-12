@@ -1,7 +1,7 @@
 import { generateImages } from "@/lib/imagegen";
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // สร้างภาพ AI ใช้เวลานาน
+export const maxDuration = 300; // Vercel Pro รองรับสูงสุด 300 วิ
 
 export async function POST(request: Request) {
   let body: { prompts?: unknown };

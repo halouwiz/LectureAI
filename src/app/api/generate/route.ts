@@ -3,7 +3,7 @@ import type { Deck } from "@/lib/schema";
 import { SYSTEM_PROMPT } from "@/lib/prompt";
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // Claude ใช้เวลา 20-40 วิ (Vercel default แค่ 10)
+export const maxDuration = 300; // Vercel Pro รองรับสูงสุด 300 วิ (เผื่อบทความยาว + สไลด์เยอะ)
 
 // ดึง JSON object ออกจากข้อความ (เผื่อมี ``` หรือข้อความปนมา)
 function extractJson(text: string): string {
