@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Deck } from "@/lib/schema";
 import SlideRenderer from "@/components/SlideRenderer";
 import { exportDeckToPdf, exportDeckToJpg } from "@/lib/export";
 
 const LEVELS = ["ปี 1", "ปี 2", "ปี 3", "ปี 4"];
+
+// ประวัติงานเก่า (History) เก็บใน localStorage — เฉพาะเครื่อง/บราวเซอร์นี้, เก็บล่าสุด 15 ชิ้น
+const HISTORY_KEY = "lectureai_history";
+const HISTORY_MAX = 15;
+type HistoryEntry = { id: string; title: string; date: string; deck: Deck; images: Record<string, string> };
 
 const MODELS = [
   { id: "claude-opus-4-8", label: "Opus 4.8" },
@@ -50,8 +55,73 @@ export default function Home() {
   const [exporting, setExporting] = useState("");
   const [genImages, setGenImages] = useState<Record<string, string>>({});
   const [genLoading, setGenLoading] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
-  async function fetchGenImages(d: Deck) {
+  // โหลดประวัติงานเก่าตอนเปิดหน้า
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (raw) setHistory(JSON.parse(raw) as HistoryEntry[]);
+    } catch {
+      // ประวัติเสียก็ข้ามไป
+    }
+  }, []);
+
+  function saveToHistory(d: Deck, imgs: Record<string, string>) {
+    const entry: HistoryEntry = {
+      id: Date.now().toString(),
+      title: d.deckTitle || "ไม่มีชื่อ",
+      date: new Date().toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }),
+      deck: d,
+      images: imgs,
+    };
+    setHistory((prev) => {
+      const next = [entry, ...prev].slice(0, HISTORY_MAX);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {
+        // เต็มก็ไม่เป็นไร
+      }
+      return next;
+    });
+  }
+
+  function loadFromHistory(entry: HistoryEntry) {
+    setError("");
+    setDeck(entry.deck);
+    setGenImages(entry.images ?? {});
+    setShowHistory(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function deleteFromHistory(id: string) {
+    setHistory((prev) => {
+      const next = prev.filter((h) => h.id !== id);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {
+        // ข้าม
+      }
+      return next;
+    });
+  }
+
+  // ปุ่ม Clear: ล้างฟอร์ม+ผลลัพธ์ เพื่อเริ่มงานใหม่ (ไม่ลบประวัติงานเก่า)
+  function handleClear() {
+    setText("");
+    setTheme("");
+    setExtra("");
+    setPdfs([]);
+    setImages([]);
+    setDeck(null);
+    setGenImages({});
+    setError("");
+    setGenLoading(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function fetchGenImages(d: Deck): Promise<Record<string, string>> {
     const set = new Set<string>();
     for (const s of d.sheets) {
       for (const sec of s.sections ?? []) if (sec.imagePrompt) set.add(sec.imagePrompt);
@@ -59,7 +129,7 @@ export default function Home() {
       if (s.central?.imagePrompt) set.add(s.central.imagePrompt);
     }
     const prompts = [...set];
-    if (prompts.length === 0) return;
+    if (prompts.length === 0) return {};
     setGenLoading(true);
     try {
       const r = await fetch("/api/image", {
@@ -68,9 +138,12 @@ export default function Home() {
         body: JSON.stringify({ prompts }),
       });
       const data = await r.json();
-      if (data.images) setGenImages(data.images);
+      const imgs = (data.images ?? {}) as Record<string, string>;
+      setGenImages(imgs);
+      return imgs;
     } catch {
       // ภาพไม่ขึ้นก็ไม่เป็นไร สไลด์ยังใช้ได้
+      return {};
     } finally {
       setGenLoading(false);
     }
@@ -132,7 +205,8 @@ export default function Home() {
       else {
         const d = data as Deck;
         setDeck(d);
-        fetchGenImages(d);
+        const imgs = await fetchGenImages(d);
+        saveToHistory(d, imgs);
       }
     } catch {
       setError("เชื่อมต่อไม่สำเร็จ ลองใหม่อีกครั้ง");
@@ -155,6 +229,70 @@ export default function Home() {
             วางเลคเชอร์ → ได้สไลด์สรุปน่ารักๆ อ่านง่ายบน iPad
           </p>
         </header>
+
+        {/* แถบเครื่องมือ: ดูงานเก่า */}
+        <div className="mb-3 flex justify-end">
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className="font-itim rounded-full border px-4 py-1.5 text-sm transition"
+            style={{ borderColor: "#E4B7C4", color: "#C94F6D", background: "#fff" }}
+          >
+            📚 งานเก่า{history.length > 0 ? ` (${history.length})` : ""}
+          </button>
+        </div>
+
+        {showHistory ? (
+          <div className="mb-4 rounded-2xl border bg-white p-4" style={{ borderColor: "#F0D8DF" }}>
+            <div className="font-itim mb-2 text-sm" style={{ color: "#C94F6D" }}>
+              งานที่เคยสร้าง (Backup ในเครื่องนี้ • เก็บล่าสุด {HISTORY_MAX} ชิ้น)
+            </div>
+            {history.length === 0 ? (
+              <p className="py-3 text-center text-sm" style={{ color: "#C18FA0" }}>
+                ยังไม่มีงานเก่า — พอสร้างสรุปเสร็จจะถูกบันทึกไว้ตรงนี้อัตโนมัติ ✨
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {history.map((h) => (
+                  <li
+                    key={h.id}
+                    className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
+                    style={{ borderColor: "#F0D8DF", background: "#FFF9FB" }}
+                  >
+                    <button
+                      onClick={() => loadFromHistory(h)}
+                      className="min-w-0 flex-1 text-left"
+                      title="กดเพื่อเปิดดู/ดาวน์โหลดอีกครั้ง"
+                    >
+                      <div className="font-itim truncate text-sm" style={{ color: "#A53F5B" }}>
+                        {h.title}
+                      </div>
+                      <div className="text-xs" style={{ color: "#C18FA0" }}>
+                        {h.date} • {h.deck.sheets?.length ?? 0} หน้า
+                      </div>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => loadFromHistory(h)}
+                        className="font-itim rounded-full px-3 py-1 text-xs text-white"
+                        style={{ background: "#D4537E" }}
+                      >
+                        เปิด
+                      </button>
+                      <button
+                        onClick={() => deleteFromHistory(h.id)}
+                        className="font-itim rounded-full border px-2 py-1 text-xs"
+                        style={{ borderColor: "#E4B7C4", color: "#C94F6D", background: "#fff" }}
+                        aria-label="ลบงานนี้"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "#F0D8DF" }}>
           {/* ช่องอินพุต 3 แบบ */}
@@ -233,7 +371,15 @@ export default function Home() {
             />
           </div>
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              onClick={handleClear}
+              disabled={loading}
+              className="font-itim rounded-full border px-5 py-2.5 text-sm transition disabled:opacity-60"
+              style={{ borderColor: "#E4B7C4", color: "#C94F6D", background: "#fff" }}
+            >
+              🧹 เริ่มใหม่
+            </button>
             <button
               onClick={handleGenerate}
               disabled={loading}
