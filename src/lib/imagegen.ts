@@ -100,11 +100,17 @@ async function genWithFallback(prompt: string): Promise<Buffer> {
   throw new Error("ไม่มี provider สำหรับสร้างภาพ");
 }
 
-export async function generateImages(prompts: string[]): Promise<Record<string, string>> {
+export async function generateImages(
+  prompts: string[],
+): Promise<{ images: Record<string, string>; errors: string[] }> {
   const hasFal = !!process.env.FAL_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
   const out: Record<string, string> = {};
-  if (!hasFal && !hasOpenAI) return out;
+  const errors: string[] = [];
+  if (!hasFal && !hasOpenAI) {
+    errors.push("ไม่มี FAL_KEY และ OPENAI_API_KEY");
+    return { images: out, errors };
+  }
 
   const unique = [...new Set(prompts.map((p) => p.trim()).filter(Boolean))];
 
@@ -120,11 +126,13 @@ export async function generateImages(prompts: string[]): Promise<Record<string, 
         const buf = await genWithFallback(prompt);
         out[prompt] = await writeCache(hash, buf);
       } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
         console.error("สร้างภาพไม่สำเร็จ:", prompt, e);
+        errors.push(msg);
         // ข้ามภาพนี้ไป สไลด์ยังเรนเดอร์ได้โดยไม่มีภาพ
       }
     }),
   );
 
-  return out;
+  return { images: out, errors };
 }

@@ -18,8 +18,8 @@ export async function POST(request: Request) {
   if (prompts.length === 0) return Response.json({ images: {} });
 
   try {
-    const images = await generateImages(prompts);
-    return Response.json({ images });
+    const { images, errors } = await generateImages(prompts);
+    return Response.json({ images, errors });
   } catch (err) {
     const message = err instanceof Error ? err.message : "image error";
     return Response.json({ images: {}, error: message }, { status: 200 });
