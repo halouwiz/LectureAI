@@ -12,8 +12,9 @@ const STYLE_SUFFIX =
   ", flat cute pastel illustration, soft blush pink palette, clean and simple, minimal, kawaii vector style, plain white background, centered single subject";
 
 const CACHE_DIR = path.join(process.cwd(), "public", "generated");
-// บน Vercel ใช้ Blob storage (มี BLOB_READ_WRITE_TOKEN), บนเครื่อง dev ใช้ disk
-const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
+// บน Vercel ใช้ Blob storage, บนเครื่อง dev ใช้ disk
+// รองรับทั้งแบบ token เก่า (BLOB_READ_WRITE_TOKEN) และแบบ OIDC ใหม่ (BLOB_STORE_ID — SDK ใช้ OIDC token อัตโนมัติ)
+const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN || !!process.env.BLOB_STORE_ID;
 const BLOB_PREFIX = "lectureai/";
 
 function hashPrompt(p: string): string {
