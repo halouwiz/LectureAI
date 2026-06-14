@@ -3,7 +3,7 @@ import type { Deck } from "@/lib/schema";
 import { SYSTEM_PROMPT } from "@/lib/prompt";
 
 export const runtime = "nodejs";
-export const maxDuration = 300; // Vercel Pro รองรับสูงสุด 300 วิ (เผื่อบทความยาว + สไลด์เยอะ)
+export const maxDuration = 800; // Vercel Pro (Fluid compute) รองรับสูงสุด 800 วิ ~13 นาที — เผื่อเอกสารใหญ่มากๆ (คิดเงินตาม CPU ที่ใช้จริง ไม่ใช่เพดานนี้)
 
 // ดึง JSON object ออกจากข้อความ (เผื่อมี ``` หรือข้อความปนมา)
 function extractJson(text: string): string {
