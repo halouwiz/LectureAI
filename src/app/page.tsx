@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { upload } from "@vercel/blob/client";
 import type { Deck } from "@/lib/schema";
 import SlideRenderer from "@/components/SlideRenderer";
 import { exportDeckToPdf, exportDeckToJpg } from "@/lib/export";
@@ -26,7 +27,6 @@ function defaultLevelByDate(): string {
   return "ปี 4";
 }
 
-type PdfFile = { name: string; data: string };
 type ImageFile = { name: string; media_type: string; data: string };
 
 function fileToBase64(file: File): Promise<{ name: string; media_type: string; data: string }> {
@@ -47,8 +47,9 @@ export default function Home() {
   const [model, setModel] = useState("claude-opus-4-8");
   const [theme, setTheme] = useState("");
   const [extra, setExtra] = useState("");
-  const [pdfs, setPdfs] = useState<PdfFile[]>([]);
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]); // เก็บไฟล์ดิบ แล้วค่อยอัปขึ้น Blob ตอนกดสร้าง
   const [images, setImages] = useState<ImageFile[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -112,7 +113,7 @@ export default function Home() {
     setText("");
     setTheme("");
     setExtra("");
-    setPdfs([]);
+    setPdfFiles([]);
     setImages([]);
     setDeck(null);
     setGenImages({});
@@ -163,10 +164,9 @@ export default function Home() {
     }
   }
 
-  async function onPickPdfs(e: React.ChangeEvent<HTMLInputElement>) {
+  function onPickPdfs(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    const read = await Promise.all(files.map(fileToBase64));
-    setPdfs((prev) => [...prev, ...read.map((r) => ({ name: r.name, data: r.data }))]);
+    setPdfFiles((prev) => [...prev, ...files]);
     e.target.value = "";
   }
 
@@ -181,12 +181,35 @@ export default function Home() {
     setError("");
     setDeck(null);
     setGenImages({});
-    if (!text.trim() && pdfs.length === 0 && images.length === 0) {
+    if (!text.trim() && pdfFiles.length === 0 && images.length === 0) {
       setError("ใส่เนื้อหาอย่างน้อย 1 อย่าง (ข้อความ / PDF / รูปภาพ) นะคะ");
       return;
     }
     setLoading(true);
     try {
+      // อัป PDF ขึ้น Vercel Blob ก่อน (ตรงจากบราวเซอร์ → ไม่ติดลิมิต body 4.5MB) แล้วส่งแค่ลิงก์
+      let pdfUrls: string[] = [];
+      if (pdfFiles.length > 0) {
+        setUploading(true);
+        try {
+          pdfUrls = await Promise.all(
+            pdfFiles.map(async (file) => {
+              const blob = await upload(file.name, file, {
+                access: "public",
+                handleUploadUrl: "/api/pdf-upload",
+              });
+              return blob.url;
+            }),
+          );
+        } catch (e) {
+          setError("อัปโหลดไฟล์ PDF ไม่สำเร็จ: " + (e instanceof Error ? e.message : "ลองใหม่อีกครั้ง"));
+          setUploading(false);
+          setLoading(false);
+          return;
+        }
+        setUploading(false);
+      }
+
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -196,7 +219,7 @@ export default function Home() {
           theme,
           extra,
           model,
-          pdfs: pdfs.map((p) => ({ data: p.data })),
+          pdfUrls,
           images: images.map((i) => ({ media_type: i.media_type, data: i.data })),
         }),
       });
@@ -320,7 +343,7 @@ export default function Home() {
             <div>
               <div className="font-itim mb-1 text-sm" style={labelStyle}>2. ไฟล์ PDF</div>
               <input type="file" accept="application/pdf" multiple onChange={onPickPdfs} className="w-full text-xs" />
-              <FileChips files={pdfs.map((p) => p.name)} onRemove={(i) => setPdfs((prev) => prev.filter((_, k) => k !== i))} />
+              <FileChips files={pdfFiles.map((f) => f.name)} onRemove={(i) => setPdfFiles((prev) => prev.filter((_, k) => k !== i))} />
             </div>
             <div>
               <div className="font-itim mb-1 text-sm" style={labelStyle}>3. รูปภาพ (แคปหน้าจอ)</div>
@@ -396,7 +419,7 @@ export default function Home() {
               className="font-itim rounded-full px-7 py-2.5 text-white transition disabled:opacity-60"
               style={{ background: "#D4537E" }}
             >
-              {loading ? "กำลังสรุป..." : "สร้างสรุป ✨"}
+              {uploading ? "กำลังอัปโหลด..." : loading ? "กำลังสรุป..." : "สร้างสรุป ✨"}
             </button>
           </div>
         </div>
@@ -409,7 +432,9 @@ export default function Home() {
 
         {loading ? (
           <p className="mt-8 text-center text-sm" style={{ color: "#C18FA0" }}>
-            กำลังให้ AI ย่อและจัดสไลด์... ⏳ (อาจใช้เวลาสักครู่)
+            {uploading
+              ? "กำลังอัปโหลดไฟล์ PDF ขึ้นคลาวด์... ☁️"
+              : "กำลังให้ AI ย่อและจัดสไลด์... ⏳ (ไฟล์ใหญ่อาจใช้เวลาหลายนาที ใจเย็นๆ นะคะ)"}
           </p>
         ) : null}
 

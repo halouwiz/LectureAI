@@ -3,7 +3,7 @@ import type { Deck } from "@/lib/schema";
 import { SYSTEM_PROMPT } from "@/lib/prompt";
 
 export const runtime = "nodejs";
-export const maxDuration = 800; // Vercel Pro (Fluid compute) รองรับสูงสุด 800 วิ ~13 นาที — เผื่อเอกสารใหญ่มากๆ (คิดเงินตาม CPU ที่ใช้จริง ไม่ใช่เพดานนี้)
+export const maxDuration = 1800; // Vercel Pro (Fluid compute, beta) รองรับสูงสุด 1800 วิ = 30 นาที — เผื่อ PDF ก้อนใหญ่มากๆ (คิดเงินตาม CPU ที่ใช้จริง ไม่ใช่เพดานนี้)
 
 // ดึง JSON object ออกจากข้อความ (เผื่อมี ``` หรือข้อความปนมา)
 function extractJson(text: string): string {
@@ -27,6 +27,7 @@ interface GenerateBody {
   model?: string;
   images?: ImageInput[];
   pdfs?: PdfInput[];
+  pdfUrls?: string[]; // ลิงก์ PDF บน Vercel Blob (สำหรับไฟล์ใหญ่ที่ส่ง base64 ตรงๆ ไม่ได้)
 }
 
 // โมเดลที่อนุญาตให้เลือก (ทุกตัวรองรับ structured outputs)
@@ -50,8 +51,9 @@ export async function POST(request: Request) {
   const model = ALLOWED_MODELS.has(body.model ?? "") ? body.model! : "claude-opus-4-8";
   const images = body.images ?? [];
   const pdfs = body.pdfs ?? [];
+  const pdfUrls = (body.pdfUrls ?? []).filter((u) => typeof u === "string" && u);
 
-  const hasContent = text || images.length > 0 || pdfs.length > 0;
+  const hasContent = text || images.length > 0 || pdfs.length > 0 || pdfUrls.length > 0;
   if (!hasContent) {
     return Response.json(
       { error: "กรุณาใส่เนื้อหา (ข้อความ / PDF / รูปภาพ) อย่างน้อย 1 อย่าง" },
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
   if (text) {
     instruction += `\n\n--- เนื้อหาเลคเชอร์ (ข้อความ) ---\n${text}`;
   }
-  if (pdfs.length > 0 || images.length > 0) {
+  if (pdfs.length > 0 || pdfUrls.length > 0 || images.length > 0) {
     instruction += `\n\n(มีไฟล์ PDF/รูปภาพแนบมาด้วย — อ่านและสรุปเนื้อหาจากไฟล์เหล่านั้น${
       text ? "รวมกับข้อความข้างบน" : ""
     })`;
@@ -91,6 +93,30 @@ export async function POST(request: Request) {
       source: { type: "base64", media_type: "application/pdf", data: pdf.data },
     });
   }
+  // PDF ก้อนใหญ่: ดึงจาก Vercel Blob ฝั่งเซิร์ฟเวอร์ (ไม่ติดลิมิต body 4.5MB) แล้วแปลงเป็น base64 ส่ง AI
+  for (const url of pdfUrls) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) {
+        console.error("[generate] fetch pdf failed:", url, r.status);
+        return Response.json(
+          { error: "ดึงไฟล์ PDF ที่อัปโหลดไว้ไม่สำเร็จ ลองอัปโหลดใหม่อีกครั้งนะคะ" },
+          { status: 502 },
+        );
+      }
+      const base64 = Buffer.from(await r.arrayBuffer()).toString("base64");
+      content.push({
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: base64 },
+      });
+    } catch (e) {
+      console.error("[generate] fetch pdf error:", url, e);
+      return Response.json(
+        { error: "ดึงไฟล์ PDF ที่อัปโหลดไว้ไม่สำเร็จ ลองอัปโหลดใหม่อีกครั้งนะคะ" },
+        { status: 502 },
+      );
+    }
+  }
   for (const img of images) {
     content.push({
       type: "image",
@@ -103,7 +129,7 @@ export async function POST(request: Request) {
 
   const params = {
     model,
-    max_tokens: 32000, // เผื่อสไลด์เยอะ (Opus 4.8 รองรับถึง 128K) — ใช้ streaming กัน HTTP timeout
+    max_tokens: 64000, // เผื่อสไลด์เยอะมากๆ (Sonnet 4.6 สูงสุด 64K, Opus 4.8 ถึง 128K) — ใช้ streaming กัน HTTP timeout
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content }],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
