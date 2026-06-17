@@ -101,17 +101,31 @@ export async function POST(request: Request) {
 
   const client = new Anthropic();
 
-  // output_config เป็นพารามิเตอร์ใหม่ที่ TypeScript ของ SDK ยังไม่ครอบคลุม จึง cast เป็น any
   const params = {
     model,
-    max_tokens: 16000,
+    max_tokens: 32000, // เผื่อสไลด์เยอะ (Opus 4.8 รองรับถึง 128K) — ใช้ streaming กัน HTTP timeout
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content }],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
   try {
-    const resp = await client.messages.create(params);
+    // ใช้ streaming + finalMessage() เพื่อรองรับ output ยาวๆ โดยไม่ชน HTTP timeout ของ SDK
+    const stream = client.messages.stream(params);
+    const resp = await stream.finalMessage();
+
+    // โดน max_tokens = JSON ถูกตัดกลางคัน บอกผู้ใช้ให้แบ่งเนื้อหา (อย่าไป parse ต่อให้ crash งงๆ)
+    if (resp.stop_reason === "max_tokens") {
+      console.error("[generate] hit max_tokens — output truncated");
+      return Response.json(
+        {
+          error:
+            "เนื้อหายาวเกินไป AI สร้างสไลด์ได้ไม่จบ 😅 ลองแบ่งเนื้อหาเป็นส่วนย่อย (เช่น ทีละหัวข้อ/ทีละตอน) แล้วสร้างทีละส่วนนะคะ",
+        },
+        { status: 502 },
+      );
+    }
+
     const textBlock = resp.content.find(
       (b: { type: string }) => b.type === "text",
     ) as { text: string } | undefined;
@@ -120,7 +134,25 @@ export async function POST(request: Request) {
       return Response.json({ error: "AI ไม่ได้ส่งผลลัพธ์กลับมา" }, { status: 502 });
     }
 
-    const deck = JSON.parse(extractJson(textBlock.text)) as Deck;
+    let deck: Deck;
+    try {
+      deck = JSON.parse(extractJson(textBlock.text)) as Deck;
+    } catch {
+      // JSON อ่านไม่ได้ (รูปแบบเพี้ยน) — ไม่ใช่ความผิดผู้ใช้ ให้ลองใหม่/ลดความซับซ้อน
+      console.error(
+        "[generate] JSON parse failed. stop_reason:",
+        resp.stop_reason,
+        "text length:",
+        textBlock.text.length,
+      );
+      return Response.json(
+        {
+          error:
+            "AI ตอบกลับมาในรูปแบบที่อ่านไม่ได้ 🙏 ลองกด 'สร้างสรุป' ใหม่อีกครั้ง หรือลดความซับซ้อน/ความยาวของเนื้อหาลงนะคะ",
+        },
+        { status: 502 },
+      );
+    }
     return Response.json(deck);
   } catch (err) {
     console.error("[generate] error:", err);
