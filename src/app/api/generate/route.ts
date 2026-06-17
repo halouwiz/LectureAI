@@ -109,54 +109,73 @@ export async function POST(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
-  try {
-    // ใช้ streaming + finalMessage() เพื่อรองรับ output ยาวๆ โดยไม่ชน HTTP timeout ของ SDK
-    const stream = client.messages.stream(params);
-    const resp = await stream.finalMessage();
+  // เรียก AI แล้วคืน Deck หรือ {error} (ไม่ throw ออกไปข้างนอก)
+  async function buildResult(): Promise<Deck | { error: string }> {
+    const aiStream = client.messages.stream(params);
+    const resp = await aiStream.finalMessage();
 
-    // โดน max_tokens = JSON ถูกตัดกลางคัน บอกผู้ใช้ให้แบ่งเนื้อหา (อย่าไป parse ต่อให้ crash งงๆ)
+    // โดน max_tokens = JSON ถูกตัดกลางคัน บอกผู้ใช้ให้แบ่งเนื้อหา
     if (resp.stop_reason === "max_tokens") {
       console.error("[generate] hit max_tokens — output truncated");
-      return Response.json(
-        {
-          error:
-            "เนื้อหายาวเกินไป AI สร้างสไลด์ได้ไม่จบ 😅 ลองแบ่งเนื้อหาเป็นส่วนย่อย (เช่น ทีละหัวข้อ/ทีละตอน) แล้วสร้างทีละส่วนนะคะ",
-        },
-        { status: 502 },
-      );
+      return {
+        error:
+          "เนื้อหายาวเกินไป AI สร้างสไลด์ได้ไม่จบ 😅 ลองแบ่งเนื้อหาเป็นส่วนย่อย (เช่น ทีละหัวข้อ/ทีละตอน) แล้วสร้างทีละส่วนนะคะ",
+      };
     }
 
     const textBlock = resp.content.find(
       (b: { type: string }) => b.type === "text",
     ) as { text: string } | undefined;
+    if (!textBlock) return { error: "AI ไม่ได้ส่งผลลัพธ์กลับมา" };
 
-    if (!textBlock) {
-      return Response.json({ error: "AI ไม่ได้ส่งผลลัพธ์กลับมา" }, { status: 502 });
-    }
-
-    let deck: Deck;
     try {
-      deck = JSON.parse(extractJson(textBlock.text)) as Deck;
+      return JSON.parse(extractJson(textBlock.text)) as Deck;
     } catch {
-      // JSON อ่านไม่ได้ (รูปแบบเพี้ยน) — ไม่ใช่ความผิดผู้ใช้ ให้ลองใหม่/ลดความซับซ้อน
       console.error(
         "[generate] JSON parse failed. stop_reason:",
         resp.stop_reason,
         "text length:",
         textBlock.text.length,
       );
-      return Response.json(
-        {
-          error:
-            "AI ตอบกลับมาในรูปแบบที่อ่านไม่ได้ 🙏 ลองกด 'สร้างสรุป' ใหม่อีกครั้ง หรือลดความซับซ้อน/ความยาวของเนื้อหาลงนะคะ",
-        },
-        { status: 502 },
-      );
+      return {
+        error:
+          "AI ตอบกลับมาในรูปแบบที่อ่านไม่ได้ 🙏 ลองกด 'สร้างสรุป' ใหม่อีกครั้ง หรือลดความซับซ้อน/ความยาวของเนื้อหาลงนะคะ",
+      };
     }
-    return Response.json(deck);
-  } catch (err) {
-    console.error("[generate] error:", err);
-    const message = err instanceof Error ? err.message : "เกิดข้อผิดพลาดไม่ทราบสาเหตุ";
-    return Response.json({ error: `เรียก Claude ไม่สำเร็จ: ${message}` }, { status: 500 });
   }
+
+  // สตรีม "heartbeat" (ช่องว่าง) ทุก 10 วิระหว่างรอ AI เพื่อกันการเชื่อมต่อ idle ถูกตัด
+  // (เคสไฟล์ PDF ใหญ่ที่ AI ใช้เวลานาน) แล้วค่อยส่ง JSON จริงต่อท้าย
+  const encoder = new TextEncoder();
+  const responseStream = new ReadableStream({
+    async start(controller) {
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(" "));
+        } catch {
+          // ปิดไปแล้วก็ข้าม
+        }
+      }, 10000);
+
+      let result: Deck | { error: string };
+      try {
+        result = await buildResult();
+      } catch (err) {
+        console.error("[generate] error:", err);
+        const message = err instanceof Error ? err.message : "เกิดข้อผิดพลาดไม่ทราบสาเหตุ";
+        result = { error: `เรียก Claude ไม่สำเร็จ: ${message}` };
+      }
+
+      clearInterval(heartbeat);
+      controller.enqueue(encoder.encode("\n" + JSON.stringify(result)));
+      controller.close();
+    },
+  });
+
+  return new Response(responseStream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+    },
+  });
 }

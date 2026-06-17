@@ -200,9 +200,19 @@ export default function Home() {
           images: images.map((i) => ({ media_type: i.media_type, data: i.data })),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) setError(data.error ?? "เกิดข้อผิดพลาด");
-      else {
+      // ตัว response มี heartbeat (ช่องว่าง) นำหน้า แล้วตามด้วย JSON จริงท้ายสุด → อ่านทั้งก้อนแล้ว parse
+      const raw = await res.text();
+      let data: Deck | { error?: string };
+      try {
+        const start = raw.indexOf("{");
+        data = JSON.parse(start >= 0 ? raw.slice(start) : raw.trim());
+      } catch {
+        setError("อ่านผลลัพธ์จากเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้งนะคะ");
+        return;
+      }
+      if (!res.ok || (data as { error?: string }).error) {
+        setError((data as { error?: string }).error ?? "เกิดข้อผิดพลาด");
+      } else {
         const d = data as Deck;
         setDeck(d);
         const imgs = await fetchGenImages(d);
