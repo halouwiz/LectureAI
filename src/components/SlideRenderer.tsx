@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type CSSProperties } from "react";
+import { createContext, useContext, type CSSProperties } from "react";
 import type { Sheet, Section, SlideColor, TableRow, IllustrationName } from "@/lib/schema";
 import Illustration from "./Illustration";
 
@@ -39,8 +39,8 @@ const COLORS: Record<SlideColor, Palette> = {
 const chip = (p: Palette): CSSProperties => ({
   display: "inline-flex",
   fontFamily: "'Itim', sans-serif",
-  fontSize: 14,
-  padding: "2px 11px",
+  fontSize: 15.5,
+  padding: "3px 12px",
   borderRadius: 999,
   background: p.chipBg,
   color: p.chipText,
@@ -66,8 +66,8 @@ function Points({ s }: { s: Section }) {
   return (
     <div style={{ color: p.text }}>
       {s.points.map((pt, i) => (
-        <div key={i} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: 13.5, lineHeight: 1.45, marginTop: 5, minWidth: 0 }}>
-          <span style={{ flex: "none", width: 6, height: 6, borderRadius: "50%", marginTop: 7, background: p.dot }} />
+        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 15, lineHeight: 1.55, marginTop: 7, minWidth: 0 }}>
+          <span style={{ flex: "none", width: 7, height: 7, borderRadius: "50%", marginTop: 8, background: p.dot }} />
           <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{pt}</span>
         </div>
       ))}
@@ -76,10 +76,11 @@ function Points({ s }: { s: Section }) {
 }
 
 function Cards({ sections }: { sections: Section[] }) {
+  // เรียงแนวตั้งเต็มความกว้าง อ่านง่ายกว่าอัดเป็นกรอบเล็ก 2 คอลัมน์
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 11 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {sections.map((s, i) => (
-        <div key={i} style={{ background: COLORS[s.color].card, borderRadius: 15, padding: "11px 13px 12px" }}>
+        <div key={i} style={{ background: COLORS[s.color].card, borderRadius: 16, padding: "13px 16px 14px" }}>
           <Heading s={s} />
           <Points s={s} />
         </div>
@@ -143,7 +144,7 @@ function Mindmap({ sheet }: { sheet: Sheet }) {
               </span>
               <div style={{ marginTop: 4 }}>
                 {s.points.map((pt, j) => (
-                  <span key={j} style={{ display: "inline-block", fontSize: 12, background: "#fff", border: `1.3px solid ${p.chipBg}`, color: p.chipText, borderRadius: 999, padding: "1px 8px", margin: "3px 4px 0 0" }}>
+                  <span key={j} style={{ display: "inline-block", fontSize: 13.5, background: "#fff", border: `1.3px solid ${p.chipBg}`, color: p.chipText, borderRadius: 999, padding: "2px 9px", margin: "4px 4px 0 0" }}>
                     {pt}
                   </span>
                 ))}
@@ -226,53 +227,31 @@ function CalloutBox({ style, text }: { style: "warning" | "tip" | "info"; text: 
 export default function SlideRenderer({ sheet, images = {} }: { sheet: Sheet; images?: Record<string, string> }) {
   const accent = COLORS[sheet.accentColor] ?? COLORS.blush;
   const sections = sheet.sections ?? [];
-  const frameRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
-  // ย่อเนื้อหาให้พอดีกรอบ iPad 3:4 อัตโนมัติ (ไม่ให้เกินหรือถูกตัด)
-  useEffect(() => {
-    const frame = frameRef.current;
-    const content = contentRef.current;
-    if (!frame || !content) return;
-    const fit = () => {
-      const avail = frame.clientHeight;
-      const need = content.scrollHeight;
-      setScale(need > avail ? avail / need : 1);
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(content);
-    return () => ro.disconnect();
-  }, [sheet, images]);
 
   return (
     <ImagesContext.Provider value={images}>
+    {/* กรอบกว้างเท่า iPad แต่ "สูงยืดได้ตามเนื้อหา" (minHeight 3:4) เน้นอ่านง่าย ไม่ย่อตัวหนังสือ */}
     <div
-      ref={frameRef}
       className="lecture-slide"
       style={{
         width: "min(480px, 92vw)",
-        height: "calc(min(480px, 92vw) * 4 / 3)",
+        minHeight: "calc(min(480px, 92vw) * 4 / 3)",
         margin: "0 auto",
-        overflow: "hidden",
         position: "relative",
-        backgroundColor: "#FBEBEF",
+        boxSizing: "border-box",
+        backgroundColor: "#FFF6FA",
         backgroundImage:
-          "linear-gradient(#F3D7DF 1px, transparent 1px), linear-gradient(90deg,#F3D7DF 1px, transparent 1px)",
+          "linear-gradient(#F8E6EC 1px, transparent 1px), linear-gradient(90deg,#F8E6EC 1px, transparent 1px)",
         backgroundSize: "24px 24px",
-        border: "1.5px solid #EFCFD8",
+        border: "1.5px solid #F4DCE3",
         borderRadius: 18,
       }}
     >
       <div
-        ref={contentRef}
         style={{
           fontFamily: "'Mali', sans-serif",
           color: "#6a4a55",
-          padding: "16px 16px 18px",
-          transform: `scale(${scale})`,
-          transformOrigin: "top center",
+          padding: "18px 18px 20px",
         }}
       >
       {/* แถบหัวข้อมีพื้นหลังสี (accentColor) */}
@@ -286,8 +265,8 @@ export default function SlideRenderer({ sheet, images = {} }: { sheet: Sheet; im
         ) : null}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {sheet.intro ? <div style={{ fontSize: 13, color: "#9b7a86", marginBottom: 10 }}>{sheet.intro}</div> : null}
+      <div>
+        {sheet.intro ? <div style={{ fontSize: 14, color: "#9b7a86", marginBottom: 12 }}>{sheet.intro}</div> : null}
 
         {sheet.layout === "cards" ? <Cards sections={sections} /> : null}
         {sheet.layout === "timeline" ? <Timeline sections={sections} /> : null}

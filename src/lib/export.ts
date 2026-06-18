@@ -2,7 +2,7 @@
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 
-const PAGE_BG = "#FBEBEF";
+const PAGE_BG = "#FFF6FA";
 
 function getSlideNodes(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".lecture-slide"));
