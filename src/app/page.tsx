@@ -14,8 +14,8 @@ const HISTORY_MAX = 15;
 type HistoryEntry = { id: string; title: string; date: string; deck: Deck; images: Record<string, string> };
 
 const MODELS = [
-  { id: "claude-opus-4-8", label: "Opus 4.8" },
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { id: "claude-opus-4-8", label: "Opus 4.8" },
 ];
 
 // Default ชั้นปีตามวันจริง (ผู้ใช้เลื่อนชั้นตามเวลา)
@@ -44,7 +44,7 @@ function fileToBase64(file: File): Promise<{ name: string; media_type: string; d
 export default function Home() {
   const [text, setText] = useState("");
   const [level, setLevel] = useState(defaultLevelByDate);
-  const [model, setModel] = useState("claude-opus-4-8");
+  const [model, setModel] = useState("claude-sonnet-4-6");
   const [theme, setTheme] = useState("");
   const [extra, setExtra] = useState("");
   const [pdfFiles, setPdfFiles] = useState<File[]>([]); // เก็บไฟล์ดิบ แล้วค่อยอัปขึ้น Blob ตอนกดสร้าง

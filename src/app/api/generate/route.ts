@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   const level = body.level ?? "ไม่ระบุ";
   const theme = (body.theme ?? "").trim();
   const extra = (body.extra ?? "").trim();
-  const model = ALLOWED_MODELS.has(body.model ?? "") ? body.model! : "claude-opus-4-8";
+  const model = ALLOWED_MODELS.has(body.model ?? "") ? body.model! : "claude-sonnet-4-6";
   const images = body.images ?? [];
   const pdfs = body.pdfs ?? [];
   const pdfUrls = (body.pdfUrls ?? []).filter((u) => typeof u === "string" && u);
