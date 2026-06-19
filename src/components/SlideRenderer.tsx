@@ -61,6 +61,19 @@ function Heading({ s }: { s: Section }) {
   );
 }
 
+// ภาพจริงจาก PDF (ครอปฝั่ง client มาเป็น data URL) — แสดงเต็มความกว้างการ์ด
+function PdfFigure({ s }: { s: Section }) {
+  if (!s.pdfFigureUrl) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={s.pdfFigureUrl}
+      alt=""
+      style={{ display: "block", width: "100%", maxHeight: 210, objectFit: "contain", borderRadius: 12, marginTop: 9, background: "#fff", border: "1px solid #efd9e0" }}
+    />
+  );
+}
+
 function Points({ s }: { s: Section }) {
   const p = COLORS[s.color];
   return (
@@ -83,6 +96,7 @@ function Cards({ sections }: { sections: Section[] }) {
         <div key={i} style={{ background: COLORS[s.color].card, borderRadius: 16, padding: "13px 16px 14px" }}>
           <Heading s={s} />
           <Points s={s} />
+          <PdfFigure s={s} />
         </div>
       ))}
     </div>
@@ -107,6 +121,7 @@ function Timeline({ sections }: { sections: Section[] }) {
                 </div>
                 {s.meta ? <div style={{ fontSize: 11.5, color: p.dot, margin: "3px 0 1px" }}>{s.meta}</div> : null}
                 <Points s={s} />
+                <PdfFigure s={s} />
               </div>
             </div>
             {i < sections.length - 1 ? (
@@ -149,6 +164,7 @@ function Mindmap({ sheet }: { sheet: Sheet }) {
                   </span>
                 ))}
               </div>
+              <PdfFigure s={s} />
             </div>
           );
         })}

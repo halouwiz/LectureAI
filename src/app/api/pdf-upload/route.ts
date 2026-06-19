@@ -23,7 +23,7 @@ export async function POST(request: Request): Promise<Response> {
       body,
       request,
       onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ["application/pdf"],
+        allowedContentTypes: ["application/pdf", "image/jpeg", "image/png"], // PDF + รูปหน้า PDF ที่เรนเดอร์
         addRandomSuffix: true,
         maximumSizeInBytes: 50 * 1024 * 1024, // รับไฟล์ใหญ่ได้ถึง 50MB
         // เก็บไว้ใน prefix เดียวกับรูป จะได้จัดการง่าย

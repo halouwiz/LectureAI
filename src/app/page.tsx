@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { upload } from "@vercel/blob/client";
+import type { RenderedPage } from "@/lib/pdfRender"; // type เท่านั้น (เลี่ยงโหลด pdfjs ตอน SSR)
 import type { Deck } from "@/lib/schema";
 import SlideRenderer from "@/components/SlideRenderer";
 import { exportDeckToPdf, exportDeckToJpg } from "@/lib/export";
@@ -48,6 +49,7 @@ export default function Home() {
   const [theme, setTheme] = useState("");
   const [extra, setExtra] = useState("");
   const [pdfFiles, setPdfFiles] = useState<File[]>([]); // เก็บไฟล์ดิบ แล้วค่อยอัปขึ้น Blob ตอนกดสร้าง
+  const [usePdfFigures, setUsePdfFigures] = useState(false); // ดึงรูปจริงจาก PDF มาใส่สไลด์
   const [images, setImages] = useState<ImageFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -189,20 +191,35 @@ export default function Home() {
     try {
       // อัป PDF ขึ้น Vercel Blob ก่อน (ตรงจากบราวเซอร์ → ไม่ติดลิมิต body 4.5MB) แล้วส่งแค่ลิงก์
       let pdfUrls: string[] = [];
+      let pageImages: string[] = [];
+      let renderedPages: RenderedPage[] = [];
       if (pdfFiles.length > 0) {
         setUploading(true);
         try {
           pdfUrls = await Promise.all(
             pdfFiles.map(async (file) => {
-              const blob = await upload(file.name, file, {
-                access: "public",
-                handleUploadUrl: "/api/pdf-upload",
-              });
+              const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/pdf-upload" });
               return blob.url;
             }),
           );
+
+          // ถ้าเปิด "ใช้ภาพจริงจาก PDF": เรนเดอร์หน้าในเบราว์เซอร์ + อัปรูปหน้าขึ้น Blob ให้ AI ดู
+          if (usePdfFigures) {
+            const { renderPdfPages } = await import("@/lib/pdfRender"); // โหลดเฉพาะฝั่ง client
+            for (const file of pdfFiles) {
+              const pages = await renderPdfPages(file, { maxPages: 20 });
+              renderedPages = renderedPages.concat(pages);
+            }
+            pageImages = await Promise.all(
+              renderedPages.map(async (pg, idx) => {
+                const blob = await fetch(pg.dataUrl).then((r) => r.blob());
+                const up = await upload(`page-${idx + 1}.jpg`, blob, { access: "public", handleUploadUrl: "/api/pdf-upload" });
+                return up.url;
+              }),
+            );
+          }
         } catch (e) {
-          setError("อัปโหลดไฟล์ PDF ไม่สำเร็จ: " + (e instanceof Error ? e.message : "ลองใหม่อีกครั้ง"));
+          setError("อัปโหลด/เตรียมไฟล์ PDF ไม่สำเร็จ: " + (e instanceof Error ? e.message : "ลองใหม่อีกครั้ง"));
           setUploading(false);
           setLoading(false);
           return;
@@ -220,6 +237,7 @@ export default function Home() {
           extra,
           model,
           pdfUrls,
+          pageImages,
           images: images.map((i) => ({ media_type: i.media_type, data: i.data })),
         }),
       });
@@ -237,6 +255,20 @@ export default function Home() {
         setError((data as { error?: string }).error ?? "เกิดข้อผิดพลาด");
       } else {
         const d = data as Deck;
+        // ครอปภาพจริงจาก PDF ตามพิกัดที่ AI ชี้ → เติม pdfFigureUrl ให้แต่ละ section
+        if (renderedPages.length > 0) {
+          const { cropFromPage } = await import("@/lib/pdfRender");
+          const byPage = new Map(renderedPages.map((p) => [p.page, p.canvas]));
+          for (const sheet of d.sheets) {
+            for (const sec of sheet.sections ?? []) {
+              const fig = sec.pdfFigure;
+              if (fig && byPage.has(fig.page)) {
+                const cropped = cropFromPage(byPage.get(fig.page)!, fig.bbox);
+                if (cropped) sec.pdfFigureUrl = cropped;
+              }
+            }
+          }
+        }
         setDeck(d);
         const imgs = await fetchGenImages(d);
         saveToHistory(d, imgs);
@@ -344,6 +376,12 @@ export default function Home() {
               <div className="font-itim mb-1 text-sm" style={labelStyle}>2. ไฟล์ PDF</div>
               <input type="file" accept="application/pdf" multiple onChange={onPickPdfs} className="w-full text-xs" />
               <FileChips files={pdfFiles.map((f) => f.name)} onRemove={(i) => setPdfFiles((prev) => prev.filter((_, k) => k !== i))} />
+              {pdfFiles.length > 0 ? (
+                <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs" style={{ color: "#A86A7C" }}>
+                  <input type="checkbox" checked={usePdfFigures} onChange={(e) => setUsePdfFigures(e.target.checked)} className="mt-0.5" />
+                  <span>🖼️ ใช้ภาพจริงจาก PDF (เช่นภาพ anatomy) — แม่นกว่าแต่ช้า/ค่าใช้จ่ายเพิ่มนิดหน่อย</span>
+                </label>
+              ) : null}
             </div>
             <div>
               <div className="font-itim mb-1 text-sm" style={labelStyle}>3. รูปภาพ (แคปหน้าจอ)</div>
@@ -433,7 +471,9 @@ export default function Home() {
         {loading ? (
           <p className="mt-8 text-center text-sm" style={{ color: "#C18FA0" }}>
             {uploading
-              ? "กำลังอัปโหลดไฟล์ PDF ขึ้นคลาวด์... ☁️"
+              ? usePdfFigures
+                ? "กำลังเตรียมรูปจาก PDF... 🖼️ (เรนเดอร์หน้า + อัปขึ้นคลาวด์)"
+                : "กำลังอัปโหลดไฟล์ PDF ขึ้นคลาวด์... ☁️"
               : "กำลังให้ AI ย่อและจัดสไลด์... ⏳ (ไฟล์ใหญ่อาจใช้เวลาหลายนาที ใจเย็นๆ นะคะ)"}
           </p>
         ) : null}

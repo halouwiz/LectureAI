@@ -28,6 +28,7 @@ interface GenerateBody {
   images?: ImageInput[];
   pdfs?: PdfInput[];
   pdfUrls?: string[]; // ลิงก์ PDF บน Vercel Blob (สำหรับไฟล์ใหญ่ที่ส่ง base64 ตรงๆ ไม่ได้)
+  pageImages?: string[]; // ลิงก์รูปหน้า PDF (เรนเดอร์ฝั่ง browser) เรียงตามหน้า 1..N — ให้ AI ชี้รูปจริง
 }
 
 // โมเดลที่อนุญาตให้เลือก (ทุกตัวรองรับ structured outputs)
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
   const images = body.images ?? [];
   const pdfs = body.pdfs ?? [];
   const pdfUrls = (body.pdfUrls ?? []).filter((u) => typeof u === "string" && u);
+  const pageImages = (body.pageImages ?? []).filter((u) => typeof u === "string" && u);
 
   const hasContent = text || images.length > 0 || pdfs.length > 0 || pdfUrls.length > 0;
   if (!hasContent) {
@@ -82,6 +84,15 @@ export async function POST(request: Request) {
     instruction += `\n\n(มีไฟล์ PDF/รูปภาพแนบมาด้วย — อ่านและสรุปเนื้อหาจากไฟล์เหล่านั้น${
       text ? "รวมกับข้อความข้างบน" : ""
     })`;
+  }
+  if (pageImages.length > 0) {
+    instruction +=
+      `\n\n=== ภาพจริงจาก PDF (หน้า 1–${pageImages.length}) ===\n` +
+      `ด้านล่างนี้คือรูปของแต่ละหน้าใน PDF (เรนเดอร์มาให้ดู) ถ้า section ไหนมี "รูปประกอบจริง" ในหน้าเหล่านี้ ` +
+      `ที่ช่วยให้เข้าใจดีกว่าการวาดใหม่ (โดยเฉพาะภาพ anatomy/แผนภาพ/ไดอะแกรม) ให้ใส่ field "pdfFigure": { "page": เลขหน้า, "bbox": [x0,y0,x1,y1] } ` +
+      `โดย bbox เป็นสัดส่วน 0–1 ของตำแหน่งรูปบนหน้านั้น (x0,y0 = มุมซ้ายบน, x1,y1 = มุมขวาล่าง วัดจากมุมซ้ายบนของหน้า) ` +
+      `กรอบให้ครอบเฉพาะรูป (รวม caption สั้นๆ ได้) อย่ากว้างเกินจนติดตัวหนังสือเยอะ\n` +
+      `- ใช้ pdfFigure เฉพาะกับรูปจริงที่มีประโยชน์เท่านั้น ถ้าไม่มีรูปจริงที่เกี่ยว ให้ใช้ illustration/imagePrompt ตามปกติ (อย่าเดาพิกัด)`;
   }
 
   // ประกอบ content blocks: PDF + รูป + ข้อความ
@@ -123,6 +134,11 @@ export async function POST(request: Request) {
       source: { type: "base64", media_type: img.media_type, data: img.data },
     });
   }
+  // รูปหน้า PDF (ส่งเป็น URL source — Claude ดึงเอง) ติดป้ายเลขหน้าให้ AI อ้างอิงได้
+  pageImages.forEach((url, idx) => {
+    content.push({ type: "text", text: `📄 หน้า ${idx + 1}:` });
+    content.push({ type: "image", source: { type: "url", url } });
+  });
   content.push({ type: "text", text: instruction });
 
   const client = new Anthropic();

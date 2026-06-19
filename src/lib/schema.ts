@@ -17,6 +17,12 @@ export type IllustrationName =
   // คน + ตกแต่ง
   | "nurse" | "person" | "flower" | "star" | "heart_deco" | "leaf";
 
+// ภาพจริงจาก PDF: AI ระบุหน้า + กรอบ (normalize 0–1) ของรูปที่ช่วยให้เข้าใจ
+export interface PdfFigure {
+  page: number; // เลขหน้า (1-based) ตามที่แนบไป
+  bbox: [number, number, number, number]; // [x0,y0,x1,y1] สัดส่วน 0–1 เทียบทั้งหน้า
+}
+
 export interface Section {
   heading: string;
   headingEn?: string;
@@ -24,6 +30,8 @@ export interface Section {
   meta?: string;
   illustration?: IllustrationName;
   imagePrompt?: string;
+  pdfFigure?: PdfFigure; // AI ชี้รูปจริงจาก PDF (ถ้ามี)
+  pdfFigureUrl?: string; // เติมฝั่ง client หลังครอป (data URL) — ไม่ได้มาจาก AI
   points: string[];
 }
 
