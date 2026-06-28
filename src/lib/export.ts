@@ -18,12 +18,18 @@ async function captureAll(): Promise<{ dataUrl: string; w: number; h: number }[]
   if (document.fonts?.ready) await document.fonts.ready;
   const out: { dataUrl: string; w: number; h: number }[] = [];
   for (const node of nodes) {
+    const w = node.offsetWidth;
+    const h = node.offsetHeight;
+    // pin ขนาดเป็น px ชัดเจน กัน html-to-image คำนวณความกว้าง (min/vw) เพี้ยนตอน clone → เนื้อหาตกขอบ
     const dataUrl = await toPng(node, {
       pixelRatio: 2,
       backgroundColor: PAGE_BG,
       cacheBust: true,
+      width: w,
+      height: h,
+      style: { width: `${w}px`, height: `${h}px`, margin: "0" },
     });
-    out.push({ dataUrl, w: node.offsetWidth, h: node.offsetHeight });
+    out.push({ dataUrl, w, h });
   }
   return out;
 }

@@ -45,7 +45,9 @@ const chip = (p: Palette): CSSProperties => ({
   background: p.chipBg,
   color: p.chipText,
   maxWidth: "100%",
+  minWidth: 0,
   overflowWrap: "anywhere",
+  wordBreak: "break-word",
 });
 
 function Heading({ s }: { s: Section }) {
@@ -255,6 +257,7 @@ export default function SlideRenderer({ sheet, images = {} }: { sheet: Sheet; im
         margin: "0 auto",
         position: "relative",
         boxSizing: "border-box",
+        overflow: "hidden", // กันเนื้อหาล้นออกนอกการ์ด (สูงยืดได้เพราะ height auto)
         backgroundColor: "#FFF6FA",
         backgroundImage:
           "linear-gradient(#F8E6EC 1px, transparent 1px), linear-gradient(90deg,#F8E6EC 1px, transparent 1px)",
@@ -268,13 +271,15 @@ export default function SlideRenderer({ sheet, images = {} }: { sheet: Sheet; im
           fontFamily: "'Mali', sans-serif",
           color: "#6a4a55",
           padding: "18px 18px 20px",
+          boxSizing: "border-box",
+          width: "100%",
         }}
       >
       {/* แถบหัวข้อมีพื้นหลังสี (accentColor) */}
       <div style={{ background: accent.chipBg, borderRadius: 14, padding: "10px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <div className="font-itim" style={{ fontSize: 25, lineHeight: 1.1, color: accent.chipText }}>{sheet.title}</div>
-          {sheet.subtitle ? <div style={{ fontSize: 12.5, marginTop: 1, color: accent.chipText, opacity: 0.85 }}>{sheet.subtitle}</div> : null}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="font-itim" style={{ fontSize: 25, lineHeight: 1.1, color: accent.chipText, overflowWrap: "anywhere" }}>{sheet.title}</div>
+          {sheet.subtitle ? <div style={{ fontSize: 12.5, marginTop: 1, color: accent.chipText, opacity: 0.85, overflowWrap: "anywhere" }}>{sheet.subtitle}</div> : null}
         </div>
         {sheet.level ? (
           <span style={{ ...chip(COLORS.blush), flex: "none", background: "#fff", color: "#A53F5B" }}>{sheet.level}</span>
